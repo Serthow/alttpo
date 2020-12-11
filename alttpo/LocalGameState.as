@@ -1165,6 +1165,24 @@ class LocalGameState : GameState {
       r.write_u16(sm_palette[i]);
     }
   }
+  
+  void serialize_sm_enemies(array<uint8> r, uint16 start, uint16 endExclusive){
+    r.write_u8(uint8(0x11));
+    
+    r.write_u16(start);
+    
+    r.write_u8(isHost? 1 : 0);
+        
+    r.write_u32(hostTimestamp);
+    uint16 count = uint16(endExclusive - start);
+    r.write_u16(count);
+    for (uint i = 0; i < count; i++) {
+      auto offs = start + i;
+      auto b = enemies[offs];
+      r.write_u16(b);
+    }
+  
+  }
 
   void serialize_sfx(array<uint8> &r) {
     r.write_u8(uint8(0x02));
@@ -1678,6 +1696,22 @@ class LocalGameState : GameState {
           array<uint8> envelope1 = create_envelope();
           serialize_sm_sprite(envelope1);
           p = send_packet(envelope1, p);
+          
+          array<uint8> envelope5 = create_envelope();
+          serialize_sm_enemies(envelope5, 0x000, 0x100);
+          p = send_packet(envelope5, p);
+            
+          array<uint8> envelope2 = create_envelope();
+          serialize_sm_enemies(envelope2, 0x100, 0x200);
+          p = send_packet(envelope2, p);
+            
+          array<uint8> envelope3 = create_envelope();
+          serialize_sm_enemies(envelope3, 0x200, 0x300);
+          p = send_packet(envelope3, p);
+            
+          array<uint8> envelope4 = create_envelope();
+          serialize_sm_enemies(envelope4, 0x300, 0x400);
+          p = send_packet(envelope4, p);
         }
       }
     }
@@ -2844,4 +2878,48 @@ class LocalGameState : GameState {
       bus::write_u16(0x7E0024, 0);
     }
   }
+  
+  void get_enemies(){
+    bus::read_block_u16(0x7e0f78, 0, 0x400, enemies);
+  }
+  
+  void set_host(){
+  
+    isHost = settings.Name == "Host";
+  }
+  
+  bool is_alone(){
+    auto len = players.length();
+    for (uint i = 0; i < len; i++) {
+      auto @remote = players[i];
+      if (remote is null) continue;
+      if (remote is local) continue;
+      if (remote.ttl < 0) continue;
+      if (remote.team != team) continue;
+
+      if (local.can_see_sm(remote)) { return false; }
+    }
+    
+    return true;
+  }
+  
+  void update_enemies(){
+    auto len = players.length();
+    for (uint i = 0; i < len; i++) {
+      auto @remote = players[i];
+      if (remote is null) continue;
+      if (remote is local) continue;
+      if (remote.ttl < 0) continue;
+      if (remote.team != team) continue;
+      
+      if (!local.isHost && remote.isHost){
+        message("enemies recieved from host");
+        for(uint i = 0; i < 0x400; i++){
+          bus::write_u16(0x7e0f78 + i, remote.enemies[i]);
+        }
+      }
+    }
+  }
+  
+  
 };

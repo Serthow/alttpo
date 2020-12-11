@@ -141,6 +141,8 @@ void on_main_sm(uint32 pc) {
   local.fetch_games_won();
   if (!sm_in_menu()){ 
     local.get_sm_sprite_data();
+    local.get_enemies();
+    local.set_host();
     if (settings.SyncTunic){
       local.update_sm_palette();
     }
@@ -189,9 +191,13 @@ void on_main_sm(uint32 pc) {
 
         local.update_sm_events();
         local.update_games_won();
+        
       }
     }
+    local.update_enemies();
   }
+  
+  
 }
 
 // pre_frame always happens
