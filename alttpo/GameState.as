@@ -589,7 +589,6 @@ class GameState {
     uint16 start = uint16(r[c++]) | (uint16(r[c++]) << 8);
     
     isHost = (r[c++] == 1);
-    isHost = true;
     
     hostTimestamp = uint32(r[c++]) | (uint32(r[c++]) << 8) | (uint32(r[c++]) << 16) | (uint32(r[c++]) << 24);
     uint16 count = uint16(r[c++]) | (uint16(r[c++]) << 8);
