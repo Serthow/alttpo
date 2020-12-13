@@ -191,10 +191,10 @@ void on_main_sm(uint32 pc) {
 
         local.update_sm_events();
         local.update_games_won();
-        
+      
+        local.update_enemies();
       }
     }
-    local.update_enemies();
   }
   
   

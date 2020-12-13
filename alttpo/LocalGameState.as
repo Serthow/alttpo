@@ -1166,7 +1166,7 @@ class LocalGameState : GameState {
     }
   }
   
-  void serialize_sm_enemies(array<uint8> r, uint16 start, uint16 endExclusive){
+  void serialize_sm_enemies(array<uint8> &r, uint16 start, uint16 endExclusive){
     r.write_u8(uint8(0x11));
     
     r.write_u16(start);
@@ -1571,7 +1571,7 @@ class LocalGameState : GameState {
     return envelope;
   }
 
-  array<uint16> maxSize(5);
+  array<uint16> maxSize(2);
 
   uint send_packet(array<uint8> &in envelope, uint p) {
     uint len = envelope.length();
@@ -1697,21 +1697,21 @@ class LocalGameState : GameState {
           serialize_sm_sprite(envelope1);
           p = send_packet(envelope1, p);
           
-          array<uint8> envelope5 = create_envelope();
-          serialize_sm_enemies(envelope5, 0x000, 0x100);
-          p = send_packet(envelope5, p);
-            
           array<uint8> envelope2 = create_envelope();
-          serialize_sm_enemies(envelope2, 0x100, 0x200);
+          serialize_sm_enemies(envelope2, 0x000, 0x100);
           p = send_packet(envelope2, p);
             
           array<uint8> envelope3 = create_envelope();
-          serialize_sm_enemies(envelope3, 0x200, 0x300);
+          serialize_sm_enemies(envelope3, 0x100, 0x200);
           p = send_packet(envelope3, p);
             
           array<uint8> envelope4 = create_envelope();
-          serialize_sm_enemies(envelope4, 0x300, 0x400);
+          serialize_sm_enemies(envelope4, 0x200, 0x300);
           p = send_packet(envelope4, p);
+            
+          array<uint8> envelope5 = create_envelope();
+          serialize_sm_enemies(envelope5, 0x300, 0x400);
+          p = send_packet(envelope5, p);
         }
       }
     }
@@ -2912,10 +2912,9 @@ class LocalGameState : GameState {
       if (remote.ttl < 0) continue;
       if (remote.team != team) continue;
       
-      if (!local.isHost && remote.isHost){
-        message("enemies recieved from host");
+      if (!local.isHost && remote.isHost && local.can_see_sm(remote)){
         for(uint i = 0; i < 0x400; i++){
-          bus::write_u16(0x7e0f78 + i, remote.enemies[i]);
+          bus::write_u16(0x7e0f78 + 2*i, remote.enemies[i]);
         }
       }
     }
