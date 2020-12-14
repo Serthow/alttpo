@@ -2465,7 +2465,7 @@ class LocalGameState : GameState {
       auto @remote = players[i];
       if (remote is null) continue;
       if (remote is local) continue;
-      if (remote.ttl < 0) continue;
+      if (remote.ttl <= 0) continue;
       if (remote.team != team) continue;
 
       for (int j = 0; j < 0x54; j++) {
@@ -2491,7 +2491,7 @@ class LocalGameState : GameState {
       auto @remote = players[i];
       if (remote is null) continue;
       if (remote is local) continue;
-      if (remote.ttl < 0) continue;
+      if (remote.ttl <= 0) continue;
       if (remote.team != team) continue;
 
       for (int j = 0; j < 0x54; j++) {
@@ -2520,7 +2520,7 @@ class LocalGameState : GameState {
       auto @remote = players[i];
       if (remote is null) continue;
       if (remote is local) continue;
-      if (remote.ttl < 0) continue;
+      if (remote.ttl <= 0) continue;
       if (remote.team != team) continue;
       if (!remote.in_sm_for_items) continue;
 
@@ -2924,7 +2924,7 @@ class LocalGameState : GameState {
       auto @remote = players[i];
       if (remote is null) continue;
       if (remote is local) continue;
-      if (remote.ttl < 0) continue;
+      if (remote.ttl <= 0) continue;
       if (remote.team != team) continue;
 
       if (local.can_see_sm(remote)) { return false; }
@@ -2933,15 +2933,16 @@ class LocalGameState : GameState {
     return true;
   }
   
-  float get_distance_from_enemy(uint enemyIndex, array<uint16> & enemyArray, GameState @player) {
+  uint32 get_distance_from_enemy(uint enemyIndex, array<uint16> & enemyArray, GameState @player) {
     uint16 enemyX = enemyArray[enemyIndex*32 + 1];
     uint16 enemyY = enemyArray[enemyIndex*32 + 3];
     uint16 smX = uint16(player.sm_x) * 256 + uint16(player.sm_sub_x);
     uint16 smY = uint16(player.sm_y) * 256 + uint16(player.sm_sub_y);
-    int xDiff = absoluteValue(int(enemyX) - int(smX));//created an abs function to simplify the code here
-    int yDiff = absoluteValue(int(enemyY) - int(smY)); //see init.as
+    
+    uint32int xDiff = absoluteValue(int(enemyX) - int(smX));//created an abs function to simplify the code here
+    uint32 yDiff = absoluteValue(int(enemyY) - int(smY)); //see init.as
   
-    return squareRoot(xDiff*xDiff + yDiff*yDiff); //switch to using a euclidean distance metric rather than a taxicab metric
+    return xDiff*xDiff + yDiff*yDiff; //switch to using a euclidean distance metric rather than a taxicab metric
   }
   
   void update_enemy(uint8 enemyIndex, GameState @player) {
@@ -2951,10 +2952,10 @@ class LocalGameState : GameState {
     }
 	
     // Get the distances from the players to the enemy
-    float distRemote1 = get_distance_from_enemy(enemyIndex, local.enemies, player); //remote distance to local enemy
-    float distRemote2 = get_distance_from_enemy(enemyIndex, player.enemies, player); // remote distance to remote enemy
-    float distLocal1 = get_distance_from_enemy(enemyIndex, local.enemies, local); // local dinstance to local enemy
-    float distLocal2 = get_distance_from_enemy(enemyIndex, player.enemies, local); //local distance to remote enemy
+    uint32 distRemote1 = get_distance_from_enemy(enemyIndex, local.enemies, player); //remote distance to local enemy
+    uint32 distRemote2 = get_distance_from_enemy(enemyIndex, player.enemies, player); // remote distance to remote enemy
+    uint32 distLocal1 = get_distance_from_enemy(enemyIndex, local.enemies, local); // local dinstance to local enemy
+    uint32 distLocal2 = get_distance_from_enemy(enemyIndex, player.enemies, local); //local distance to remote enemy
     if (local.timeInRoom < 5) {
       distLocal1 = 0xffff;
       distLocal2 = 0xffff;
@@ -3017,7 +3018,7 @@ class LocalGameState : GameState {
       auto @remote = players[i];
       if (remote is null) continue;
       if (remote is local) continue;
-      if (remote.ttl < 0) continue;
+      if (remote.ttl <= 0) continue;
       if (remote.team != team) continue;
 
       if (local.can_see_sm(remote)) {
