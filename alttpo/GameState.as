@@ -587,18 +587,7 @@ class GameState {
   int deserialize_sm_enemies(array<uint8> r, int c){
     //message("deserialize_sm_enemies");
 	
-    uint8 packetType = r[c++];
-	
-	uint16 start = 0;
-	if (packetType == 0x02) {
-	  start = 0x100;
-	}
-	else if (packetType == 0x03) {
-	  start = 0x200;
-	}
-	else if (packetType == 0x04) {
-	  start = 0x300;
-	}
+    uint16 start = (r[c++] - 1) * 0x100;
 	
     for (uint i = 0; i < 0x100; i++) {
       auto offs = start + i;

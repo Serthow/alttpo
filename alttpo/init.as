@@ -192,3 +192,29 @@ uint16 min(uint16 a, uint16 b) {
   if (a < b) return a;
   return b;
 }
+
+int absoluteValue(int a){
+  if (a > 0)
+    return a;
+  return -a;
+}
+
+float squareRoot(uint16 x){
+  float coeff = float(x);
+  int exponent = 0;
+  
+  while (coeff >= 2){
+    coeff /= 4;
+    exponent++;
+  }
+  
+  float guess = (.5+.5*coeff)*(1<<exponent);
+  float error = guess*guess - x;
+  while (absoluteValue(error) > .0005){
+    guess = (x/guess + guess)/2;
+    error = guess*guess - x;
+  }
+  
+  return guess;
+  
+}

@@ -1,8 +1,5 @@
 MemoryWindow @memoryWindow;
 
-const uint memRows = 0x20;
-const uint memWindowBytes = 0x10 * memRows;
-
 class MemoryWindow {
   private GUI::Window @window;
   private GUI::VerticalLayout @vl;
@@ -11,12 +8,11 @@ class MemoryWindow {
 
   uint32 addr;
   uint32 addrCapture;
-  array<uint8> page(memWindowBytes);
-  array<uint8> base(memWindowBytes);
+  array<uint8> page(0x100);
+  array<uint8> base(0x100);
 
-  array<GUI::Label@> lblAddrRow(memRows);
-  array<GUI::Label@> lblAddrCol(0x10);
-  array<GUI::Label@> lblData(memWindowBytes);
+  array<GUI::Label@> lblAddr(0x10);
+  array<GUI::Label@> lblData(0x100);
 
   GUI::Color gridColor = GUI::Color( 80,  80,  80);
   GUI::Color addrColor = GUI::Color(220, 220,   0);
@@ -26,11 +22,13 @@ class MemoryWindow {
   MemoryWindow() {
     addr = 0x7E0000;
 
+    auto fontWidth = 7.225; // looks nice on my mac with 8pt font
+
     // relative position to bsnes window:
     @window = GUI::Window(256, 16, true);
     window.title = "Memory";
     window.font = GUI::Font("{mono}", 8);
-    window.size = GUI::Size((16*3 + 6 + 3) * 8, (memRows + 2) * 16);
+    window.size = GUI::Size((16*3 + 6 + 2) * 8, (16 + 2) * 16);
     window.backgroundColor = GUI::Color( 20,  20,  20);
 
     @vl = GUI::VerticalLayout();
@@ -42,12 +40,11 @@ class MemoryWindow {
 
       auto @lbl = GUI::Label();
       lbl.text = "address: ";
-      lbl.foregroundColor = addrColor;
+      //lbl.foregroundColor = addrColor;
       hz.append(lbl, GUI::Size(0, 0), 5);
 
       @txtAddr = GUI::LineEdit();
       txtAddr.text = fmtHex(addr, 6);
-      txtAddr.foregroundColor = GUI::Color(192, 192, 192);
       txtAddr.onChange(@GUI::Callback(txtAddrChanged));
       hz.append(txtAddr, GUI::Size(-1, 0), 5);
 
@@ -62,7 +59,7 @@ class MemoryWindow {
       vl.append(hz, GUI::Size(-1, 0), 0);
 
       auto @lbl = GUI::Label();
-      lbl.text = "      ";
+      lbl.text = "       ";
       lbl.foregroundColor = addrColor;
       hz.append(lbl, GUI::Size(0, 0), 0);
 
@@ -71,28 +68,25 @@ class MemoryWindow {
       lbl.foregroundColor = gridColor;
       hz.append(lbl, GUI::Size(0, 0), 0);
 
-      // U+2007 = FIGURE SPACE = "Tabular width", the width of digits.
-      for (uint i = 0; i < 0x10; i++) {
-        @lblAddrCol[i] = GUI::Label();
-        lblAddrCol[i].text = fmtHex((addr + i) & 0x0F, 2) + "\u2007";
-        lblAddrCol[i].foregroundColor = addrColor;
-        hz.append(lblAddrCol[i], GUI::Size(0, 0), 0);
-      }
+      @lbl = GUI::Label();
+      lbl.text = "00 01 02 03 04 05 06 07 08 09 0A 0B 0C 0D 0E 0F";
+      lbl.foregroundColor = addrColor;
+      hz.append(lbl, GUI::Size(-1, 0), 0);
 
       @lbl = GUI::Label();
-      lbl.text = "-------+------------------------------------------------";
+      lbl.text = "--------+------------------------------------------------";
       lbl.foregroundColor = gridColor;
       vl.append(lbl, GUI::Size(0, 0), 0);
     }
 
-    for (uint i = 0; i < memRows; i++) {
+    for (uint i = 0; i < 16; i++) {
       auto @hz = GUI::HorizontalLayout();
       vl.append(hz, GUI::Size(-1, 0), 0);
 
-      @lblAddrRow[i] = GUI::Label();
-      lblAddrRow[i].text = fmtHex(addr + (i << 4), 6);
-      lblAddrRow[i].foregroundColor = addrColor;
-      hz.append(lblAddrRow[i], GUI::Size(0, 0), 0);
+      @lblAddr[i] = GUI::Label();
+      lblAddr[i].text = "$" + fmtHex(addr + (i << 4), 6);
+      lblAddr[i].foregroundColor = addrColor;
+      hz.append(lblAddr[i], GUI::Size(0, 0), 0);
 
       auto @lbl = GUI::Label();
       lbl.text = " | ";
@@ -102,9 +96,9 @@ class MemoryWindow {
       for (uint x = 0; x < 16; x++) {
         auto j = (i << 4) + x;
         @lblData[j] = GUI::Label();
-        lblData[j].text = "00\u2007";
+        lblData[j].text = "00 ";
         lblData[j].foregroundColor = dataColor;
-        hz.append(lblData[j], GUI::Size(0, 0), 0);
+        hz.append(lblData[j], GUI::Size(fontWidth*3, 0), 0);
       }
     }
 
@@ -115,61 +109,46 @@ class MemoryWindow {
 
   void btnCaptureClicked() {
     // capture current page:
-    addrCapture = addr;
-    bus::read_block_u8(addrCapture, 0, memWindowBytes, base);
+    addrCapture = addr & 0xFFFFF0;
+    bus::read_block_u8(addrCapture, 0, 0x100, base);
 
     update();
   }
 
   void txtAddrChanged() {
-    addr = txtAddr.text.hex();
-    if (addr + memWindowBytes >= 0x1000000) {
-      addr = 0x1000000 - memWindowBytes;
-    }
+    // mask off last 4 bits to align base address to 16 bytes:
+    addr = txtAddr.text.hex() & 0xFFFFF0;
 
     update();
   }
 
   void update() {
     // read data:
-    bus::read_block_u8(addr, 0, memWindowBytes, page);
-
-    // update address columns:
-    for (uint i = 0; i < 0x10; i++) {
-      lblAddrCol[i].text = fmtHex((addr + i) & 0x0F, 2) + "\u2007";
-    }
+    bus::read_block_u8(addr & 0xFFFFF0, 0, 0x100, page);
 
     // update display:
-    int32 offs = addr - addrCapture;
-    for (uint i = 0; i < memRows; i++) {
+    for (uint i = 0; i < 16; i++) {
       auto row = i << 4;
-      auto absAddr = addr + row;
-      lblAddrRow[i].text = fmtHex(absAddr, 6);
+      lblAddr[i].text = "$" + fmtHex(addr + row, 6);
 
-      if ((absAddr < addrCapture + memWindowBytes) || (absAddr >= addrCapture + memWindowBytes)) {
-        // no capture window overlap:
-        for (uint x = 0; x < 0x10; x++, absAddr++) {
+      auto absAddr = (addr + row);
+      if ((absAddr >= addrCapture) && (absAddr < addrCapture + 0x100)) {
+        // compare current to snapshot:
+        int32 offs = addr - addrCapture;
+        for (uint x = 0; x < 16; x++) {
           auto j = row + x;
-          lblData[j].text = fmtHex(page[j], 2) + "\u2007";
-          lblData[j].foregroundColor = dataColor;
-        }
-      } else {
-        // capture window overlap:
-        for (uint x = 0; x < 0x10; x++, absAddr++) {
-          auto j = row + x;
-          lblData[j].text = fmtHex(page[j], 2) + "\u2007";
-
-          // determine color:
-          if ((absAddr >= addrCapture) && (absAddr < addrCapture + memWindowBytes)) {
-            // compare current to snapshot:
-            if (page[j] != base[j+offs]) {
-              lblData[j].foregroundColor = diffColor;
-            } else {
-              lblData[j].foregroundColor = dataColor;
-            }
+          lblData[j].text = fmtHex(page[j], 2);
+          if (page[j] != base[j+offs]) {
+            lblData[j].foregroundColor = diffColor;
           } else {
             lblData[j].foregroundColor = dataColor;
           }
+        }
+      } else {
+        for (uint x = 0; x < 16; x++) {
+          auto j = row + x;
+          lblData[j].text = fmtHex(page[j], 2);
+          lblData[j].foregroundColor = dataColor;
         }
       }
     }

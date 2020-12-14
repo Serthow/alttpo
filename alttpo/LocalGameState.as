@@ -1166,14 +1166,14 @@ class LocalGameState : GameState {
     }
   }
 
-  uint serialize_sm_enemies(uint p){
-    //message("serialize_sm_enemies");
+  uint send_sm_enemies(uint p){
+    //message("send_sm_enemies");
 	
 	// First 0x100 bytes (0x000 - 0x100)
 	uint16 start = 0;
 	array<uint8> env1 = create_envelope();
     env1.write_u8(uint8(0x11));
-	env1.write_u8(uint8(0x01));
+    env1.write_u8(uint8(0x01));
 	for (uint i = 0; i < 0x100; i++) {
       auto offs = start + i;
       auto b = enemies[offs];
@@ -1732,7 +1732,7 @@ class LocalGameState : GameState {
           serialize_sm_sprite(envelope1);
           p = send_packet(envelope1, p);
 		  
-		  p = serialize_sm_enemies(p);
+          p = send_sm_enemies(p);
         }
       }
     }
@@ -2933,71 +2933,50 @@ class LocalGameState : GameState {
     return true;
   }
   
-  uint16 get_distance_from_enemy(uint enemyIndex, array<uint16> & enemyArray, GameState @player) {
+  float get_distance_from_enemy(uint enemyIndex, array<uint16> & enemyArray, GameState @player) {
     uint16 enemyX = enemyArray[enemyIndex*32 + 1];
-	uint16 enemyY = enemyArray[enemyIndex*32 + 3];
-	uint16 smX = player.sm_x * 256 + player.sm_sub_x;
-	uint16 smY = player.sm_y * 256 + player.sm_sub_y;
-	uint16 xDiff = 0;
-	if (enemyX > smX) {
-	  xDiff = enemyX - smX;
-	}
-	else {
-	  xDiff = smX - enemyX;
-	}
-	uint16 yDiff = 0;
-	if (enemyY > smY) {
-	  yDiff = enemyY - smY;
-	}
-	else {
-	  yDiff = smY - enemyY;
-	}
-	return (xDiff + yDiff);
+    uint16 enemyY = enemyArray[enemyIndex*32 + 3];
+    uint16 smX = uint16(player.sm_x) * 256 + uint16(player.sm_sub_x);
+    uint16 smY = uint16(player.sm_y) * 256 + uint16(player.sm_sub_y);
+    int xDiff = absoluteValue(int(enemyX) - int(smX));//created an abs function to simplify the code here
+    int yDiff = absoluteValue(int(enemyY) - int(smY)); //see init.as
+  
+    return squareRoot(xDiff*xDiff + yDiff*yDiff); //switch to using a euclidean distance metric rather than a taxicab metric
   }
   
   void update_enemy(uint8 enemyIndex, GameState @player) {
     // Does this enemy even have data?
-	if (enemies[enemyIndex*32] == 0) {
-	  return;
-	}
+    if (enemies[enemyIndex*32] == 0) {
+      return;
+    }
 	
     // Get the distances from the players to the enemy
-	uint16 distRemote1 = get_distance_from_enemy(enemyIndex, local.enemies, player);
-	uint16 distRemote2 = get_distance_from_enemy(enemyIndex, player.enemies, player);
-	uint16 distLocal1 = get_distance_from_enemy(enemyIndex, local.enemies, local);
-	uint16 distLocal2 = get_distance_from_enemy(enemyIndex, player.enemies, local);
-	if (local.timeInRoom < 5) {
-	  distLocal1 = 0xffff;
-	  distLocal2 = 0xffff;
-	}
+    float distRemote1 = get_distance_from_enemy(enemyIndex, local.enemies, player); //remote distance to local enemy
+    float distRemote2 = get_distance_from_enemy(enemyIndex, player.enemies, player); // remote distance to remote enemy
+    float distLocal1 = get_distance_from_enemy(enemyIndex, local.enemies, local); // local dinstance to local enemy
+    float distLocal2 = get_distance_from_enemy(enemyIndex, player.enemies, local); //local distance to remote enemy
+    if (local.timeInRoom < 5) {
+      distLocal1 = 0xffff;
+      distLocal2 = 0xffff;
+    }
 	
-	if (distLocal1 < distRemote1 && distLocal2 < distRemote2) {
-	  // We are closer than the remote, so we are the host!
-	  // No need to change our local data for this enemy
-	  local.name += fmtInt(enemyIndex) + "_";
-	  return;
-	}
-	else if (distLocal1 > distRemote1 && distLocal2 > distRemote2) {
-	  // This player is closer than we currently have data for!
-	  // Overwrite our data for this enemy based on the remote players data
-	  for(uint i = 0; i < 32; i++){
-	    bus::write_u16(0x7e0f78 + enemyIndex*64 + i*2, player.enemies[enemyIndex*32 + i]);
-	  }
-	}
-	else {
-	  // We have conflicting data (a tie in distance usually)
-	  // For this case, defer to the player with the longest time in the room
-	  if (player.timeInRoom > local.timeInRoom) {
-	    // remote player has priority
-		// Overwrite our data for this enemy based on the remote players data
-	    for(uint i = 0; i < 32; i++){
-	      bus::write_u16(0x7e0f78 + enemyIndex*64 + i*2, player.enemies[enemyIndex*32 + i]);
-	    }
-	  }
-	  else {
-	    local.name += fmtInt(enemyIndex) + "_";
-	  }
-	}
+    if (distLocal1 < distRemote1 && distLocal2 < distRemote2) {
+      // We are closer than the remote, so we are the host!
+      // No need to change our local data for this enemy
+      local.name += fmtInt(enemyIndex) + "_";
+      return;
+    }
+    else if ((distLocal1 > distRemote1 && distLocal2 > distRemote2) || (player.timeInRoom > local.timeInRoom)) {
+      // This player is closer than we currently have data for!
+      // Or has been in the room longer
+      // Overwrite our data for this enemy based on the remote players data
+      for(uint i = 0; i < 32; i++){
+        bus::write_u16(0x7e0f78 + enemyIndex*64 + i*2, player.enemies[enemyIndex*32 + i]);
+      }
+    }
+    else {
+	    local.name += fmtInt(enemyIndex) + "!";
+    }
   }
 
   void update_enemies(){
