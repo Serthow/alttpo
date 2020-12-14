@@ -1,7 +1,7 @@
 
 void post_frame() {
   //message("post_frame");
-  ppu::frame.text(  0,  0, fmtBool(local.isHost));
+
   if (oamWindow !is null) {
     oamWindow.update();
   }

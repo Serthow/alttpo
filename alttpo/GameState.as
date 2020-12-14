@@ -30,7 +30,7 @@ class GameState {
   array<uint16> palettes(8 * 16);
   // lookup remote chr number to find local chr number mapped to:
   array<uint16> reloc(512);
-  
+
   // $3D9-$3E4: 6x uint16 characters for player name
 
   void player_changed() {
@@ -110,8 +110,8 @@ class GameState {
   uint8 sm_clear, z3_clear;
 
   array<uint16> enemies(0x400);
-  bool isHost;
-  uint32 hostTimestamp;
+  array<uint16> enemyDistanceToPlayers(32);
+  uint16 timeInRoom = 0;
 
   uint8 _module;
   uint8 module {
@@ -501,7 +501,7 @@ class GameState {
         case 0x0E: c = deserialize_sram_buffer(r, c); break;
         case 0x0F: c = deserialize_sm_location(r, c); break;
         case 0x10: c = deserialize_sm_sprite(r, c); break;
-        case 0x11: c = deserialize_sm_enemies(r, c); break;
+		case 0x11: c = deserialize_sm_enemies(r, c); break;
         default:
           message("unknown packet type " + fmtHex(packetType, 2) + " at offs " + fmtHex(c, 3));
           break;
@@ -582,26 +582,32 @@ class GameState {
         }
     
     return c;
-  }
-  
-  int deserialize_sm_enemies(array<uint8> r, int c){
-  
-    uint16 start = uint16(r[c++]) | (uint16(r[c++]) << 8);
-    
-    isHost = (r[c++] == 1);
-    
-    hostTimestamp = uint32(r[c++]) | (uint32(r[c++]) << 8) | (uint32(r[c++]) << 16) | (uint32(r[c++]) << 24);
-    uint16 count = uint16(r[c++]) | (uint16(r[c++]) << 8);
+    }
 
-    for (uint i = 0; i < count; i++) {
+  int deserialize_sm_enemies(array<uint8> r, int c){
+    //message("deserialize_sm_enemies");
+	
+    uint8 packetType = r[c++];
+	
+	uint16 start = 0;
+	if (packetType == 0x02) {
+	  start = 0x100;
+	}
+	else if (packetType == 0x03) {
+	  start = 0x200;
+	}
+	else if (packetType == 0x04) {
+	  start = 0x300;
+	}
+	
+    for (uint i = 0; i < 0x100; i++) {
       auto offs = start + i;
       auto b = uint16(r[c++]) | (uint16(r[c++]) << 8);
 
       enemies[offs] = b;
     }
-
-    return c;
-    
+	
+	return c;
   }
 
   int deserialize_sfx(array<uint8> r, int c) {

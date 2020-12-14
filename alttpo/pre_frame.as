@@ -130,6 +130,8 @@ bool sm_in_menu(){
 void on_main_sm(uint32 pc) {
   //message("main_sm");
   main_called = true;
+  
+  ppu::frame.text(  0,  10, "sm main called");
 
   rom.check_game();
   local.set_in_sm(!rom.is_alttp());
@@ -141,8 +143,7 @@ void on_main_sm(uint32 pc) {
   local.fetch_games_won();
   if (!sm_in_menu()){ 
     local.get_sm_sprite_data();
-    local.get_enemies();
-    local.set_host();
+	local.get_enemies();
     if (settings.SyncTunic){
       local.update_sm_palette();
     }
@@ -191,13 +192,11 @@ void on_main_sm(uint32 pc) {
 
         local.update_sm_events();
         local.update_games_won();
-      
-        local.update_enemies();
       }
     }
   }
-  
-  
+  local.update_enemies();
+  local.timeInRoom++;
 }
 
 // pre_frame always happens
