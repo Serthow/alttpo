@@ -110,7 +110,6 @@ class GameState {
   uint8 sm_clear, z3_clear;
 
   array<uint16> enemies(0x400);
-  array<uint16> enemyDistanceToPlayers(32);
   uint16 timeInRoom = 0;
 
   uint8 _module;
@@ -568,6 +567,7 @@ class GameState {
     sm_room_x = r[c++];
     sm_room_y = r[c++];
     sm_pose = r[c++];
+    timeInRoom = uint16(r[c++]) | (uint16(r[c++]) << 8);
 
     return c;
   }

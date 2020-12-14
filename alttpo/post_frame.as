@@ -1,11 +1,6 @@
 
 void post_frame() {
   //message("post_frame");
-  
-  ppu::frame.text(0,0, fmtHex(local.enemies[2*32 + 1]));
-  ppu::frame.text(50,0, fmtHex(local.enemies[2*32 + 3]));
-  ppu::frame.text(100,0, fmtHex(local.sm_x * 256 + local.sm_sub_x));
-  ppu::frame.text(150,0, fmtHex(local.sm_y * 256 + local.sm_sub_y));
 
   if (oamWindow !is null) {
     oamWindow.update();

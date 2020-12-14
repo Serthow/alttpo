@@ -195,8 +195,10 @@ void on_main_sm(uint32 pc) {
       }
     }
   }
-  local.update_enemies();
-  local.timeInRoom++;
+  if (!sm_loading_room()) {
+    local.update_enemies();
+    local.timeInRoom++;
+  }
 }
 
 // pre_frame always happens

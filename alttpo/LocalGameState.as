@@ -1153,7 +1153,8 @@ class LocalGameState : GameState {
     r.write_u8(sm_room_x);
     r.write_u8(sm_room_y);
     r.write_u8(sm_pose);
-  }
+    r.write_u16(timeInRoom);
+  } 
   
   void serialize_sm_sprite(array<uint8> &r){
     r.write_u8(uint8(0x10));
@@ -1169,54 +1170,34 @@ class LocalGameState : GameState {
   uint send_sm_enemies(uint p){
     //message("send_sm_enemies");
 	
-	// First 0x100 bytes (0x000 - 0x100)
-	uint16 start = 0;
-	array<uint8> env1 = create_envelope();
+    array<uint8> env1 = create_envelope();
+    array<uint8> env2 = create_envelope();
+    array<uint8> env3 = create_envelope();
+    array<uint8> env4 = create_envelope();
+  
     env1.write_u8(uint8(0x11));
-    env1.write_u8(uint8(0x01));
-	for (uint i = 0; i < 0x100; i++) {
-      auto offs = start + i;
-      auto b = enemies[offs];
-      env1.write_u16(b);
-    }
-	p = send_packet(env1, p);
-	
-	// Second 0x100 bytes (0x100 - 0x200)
-	start = 0x100;
-	array<uint8> env2 = create_envelope();
     env2.write_u8(uint8(0x11));
-	env2.write_u8(uint8(0x02));
-	for (uint i = 0; i < 0x100; i++) {
-      auto offs = start + i;
-      auto b = enemies[offs];
-      env2.write_u16(b);
-    }
-	p = send_packet(env2, p);
-	
-	// Third 0x100 bytes (0x200 - 0x300)
-	start = 0x200;
-	array<uint8> env3 = create_envelope();
     env3.write_u8(uint8(0x11));
-	env3.write_u8(uint8(0x03));
-	for (uint i = 0; i < 0x100; i++) {
-      auto offs = start + i;
-      auto b = enemies[offs];
-      env3.write_u16(b);
-    }
-	p = send_packet(env3, p);
-	
-	// Fourth 0x100 bytes (0x300 - 0x400)
-	start = 0x300;
-	array<uint8> env4 = create_envelope();
     env4.write_u8(uint8(0x11));
-	env4.write_u8(uint8(0x04));
-	for (uint i = 0; i < 0x100; i++) {
-      auto offs = start + i;
-      auto b = enemies[offs];
-      env4.write_u16(b);
+    
+    env1.write_u8(uint8(0x01));
+    env2.write_u8(uint8(0x02));
+    env3.write_u8(uint8(0x03));
+    env4.write_u8(uint8(0x04));
+    
+    
+    for (uint i = 0; i < 0x100; i++) {
+      env1.write_u16(enemies[i]);
+      env2.write_u16(enemies[0x100 + i]);
+      env3.write_u16(enemies[0x200 + i]);
+      env4.write_u16(enemies[0x300 + i]);
     }
-	p = send_packet(env4, p);
-	return p;
+    
+    p = send_packet(env1, p);
+    p = send_packet(env2, p);
+    p = send_packet(env3, p);
+    p = send_packet(env4, p);
+    return p;
   }
 
   void serialize_sfx(array<uint8> &r) {
@@ -2545,28 +2526,22 @@ class LocalGameState : GameState {
   
   void get_sm_coords() {
     if (sm_loading_room()) return;
-	bool changedRoom;
-	uint8 temp = bus::read_u8(0x7E079f);
-	changedRoom = (temp != sm_area);
-    sm_area = temp;
+    uint8 tempArea = bus::read_u8(0x7E079f);
+    uint8 tempX = bus::read_u8(0x7E07A1);
+    uint8 tempY = bus::read_u8(0x7E07A3);
+    bool changedRoom = (tempArea != sm_area) || (tempX != sm_room_x) || (tempY != sm_room_y);
+  
+    sm_area = tempArea;
+    sm_room_x = tempX;
+    sm_room_y = tempY;
     sm_x = bus::read_u8(0x7E0AF7);
     sm_y = bus::read_u8(0x7E0AFB);
     sm_sub_x = bus::read_u8(0x7E0AF6);
     sm_sub_y = bus::read_u8(0x7E0AFA);
-	temp = bus::read_u8(0x7E07A1);
-	if (!changedRoom) {
-	  changedRoom = (temp != sm_room_x);
-	}
-    sm_room_x = temp;
-	temp = bus::read_u8(0x7E07A3);
-	if (!changedRoom) {
-	  changedRoom = (temp != sm_room_y);
-	}
-    sm_room_y = temp;
     sm_pose = bus::read_u8(0x7E0A1C);
-	if (changedRoom) {
-	  timeInRoom = 0;
-	}
+    if (changedRoom) {
+      timeInRoom = 0;
+    }
   }
   
   void get_sm_sprite_data(){
@@ -2934,12 +2909,12 @@ class LocalGameState : GameState {
   }
   
   uint32 get_distance_from_enemy(uint enemyIndex, array<uint16> & enemyArray, GameState @player) {
-    uint16 enemyX = enemyArray[enemyIndex*32 + 1];
-    uint16 enemyY = enemyArray[enemyIndex*32 + 3];
+    uint16 enemyX = enemyArray[enemyIndex * 32 + 1];
+    uint16 enemyY = enemyArray[enemyIndex * 32 + 3];
     uint16 smX = uint16(player.sm_x) * 256 + uint16(player.sm_sub_x);
     uint16 smY = uint16(player.sm_y) * 256 + uint16(player.sm_sub_y);
     
-    uint32int xDiff = absoluteValue(int(enemyX) - int(smX));//created an abs function to simplify the code here
+    uint32 xDiff = absoluteValue(int(enemyX) - int(smX));//created an abs function to simplify the code here
     uint32 yDiff = absoluteValue(int(enemyY) - int(smY)); //see init.as
   
     return xDiff*xDiff + yDiff*yDiff; //switch to using a euclidean distance metric rather than a taxicab metric
@@ -2948,6 +2923,11 @@ class LocalGameState : GameState {
   void update_enemy(uint8 enemyIndex, GameState @player) {
     // Does this enemy even have data?
     if (enemies[enemyIndex*32] == 0) {
+      //Enemy is dead from remote, so delete the enemy here
+      //TODO update the count for number of enemies in the room
+      for(uint i = 0; i < 32; i++){
+        bus::write_u16(0x7e0f78 + enemyIndex*64 + i*2, 0 );
+      }
       return;
     }
 	
@@ -2956,6 +2936,12 @@ class LocalGameState : GameState {
     uint32 distRemote2 = get_distance_from_enemy(enemyIndex, player.enemies, player); // remote distance to remote enemy
     uint32 distLocal1 = get_distance_from_enemy(enemyIndex, local.enemies, local); // local dinstance to local enemy
     uint32 distLocal2 = get_distance_from_enemy(enemyIndex, player.enemies, local); //local distance to remote enemy
+    
+    //give the enemy the minimum of remote an local health
+    uint16 localHealth = local.enemies[enemyIndex * 32 + 10];
+    uint16 remoteHealth = player.enemies[enemyIndex * 32 + 10];
+    bus::write_u16(0x7e0f78 + enemyIndex*64 + 20, min(localHealth, remoteHealth));
+    
     if (local.timeInRoom < 5) {
       distLocal1 = 0xffff;
       distLocal2 = 0xffff;
@@ -2964,55 +2950,35 @@ class LocalGameState : GameState {
     if (distLocal1 < distRemote1 && distLocal2 < distRemote2) {
       // We are closer than the remote, so we are the host!
       // No need to change our local data for this enemy
-      local.name += fmtInt(enemyIndex) + "_";
+      //local.name += fmtInt(enemyIndex) + "_";
       return;
     }
     else if ((distLocal1 > distRemote1 && distLocal2 > distRemote2) || (player.timeInRoom > local.timeInRoom)) {
       // This player is closer than we currently have data for!
       // Or has been in the room longer
       // Overwrite our data for this enemy based on the remote players data
+      // And update the local array to make the calculation correct for 3+ players
       for(uint i = 0; i < 32; i++){
+        local.enemies[enemyIndex*32 + i] = player.enemies[enemyIndex*32 + i];
         bus::write_u16(0x7e0f78 + enemyIndex*64 + i*2, player.enemies[enemyIndex*32 + i]);
       }
     }
     else {
-	    local.name += fmtInt(enemyIndex) + "!";
+	    //local.name += fmtInt(enemyIndex) + "!";
     }
   }
 
   void update_enemies(){
-    // TEST
-	//for (uint i = 0; i < 1; i++) {
-	//  uint16 distLocal = get_distance_from_enemy(i, local.enemies, local);
-	//  uint16 enemyX = local.enemies[i*32 + 1];
-	//  uint16 enemyY = local.enemies[i*32 + 3];
-	//  message("Pos test: [E " + fmtInt(i) + "] " + 
-	//    //"[sm_x = " + fmtInt(local.sm_x) + ", " + fmtInt(local.sm_sub_x) + "] [sm_y = " + fmtInt(local.sm_y) + ", " + fmtInt(local.sm_sub_y) + "]" +
-	//	"[sm_x = " + fmtInt(local.sm_x * 256 + local.sm_sub_x) + "] [sm_y = " + fmtInt(local.sm_y * 256 + local.sm_sub_y) + "]" +
-	//    "[e_x = " + fmtInt(enemyX) + "] [e_y = " + fmtInt(enemyY) + "]" +
-	//    "[dist = " + fmtInt(distLocal) + "]");
-    //}
   
-    local.name = "p_";
+    //local.name = "p_";
     // First, do a quick check to see if anyone else is even in the same area as you
-	if (local.is_alone()) {
-	  // No need to do anything here, simply exit!
-	  local.name += "alone";
-	  return;
-	}
+    if (local.is_alone()) {
+      // No need to do anything here, simply exit!
+      //local.name += "alone";
+      return;
+    }
 	
-    // Reset the enemyDistanceToPlayers
-	//if (local.timeInRoom < 5) {
-	  for (uint i = 0; i < 32; i++) {
-	    local.enemyDistanceToPlayers[i] = 0xffff;
-	  }
-	//}
-	//else {
-	//  for (uint i = 0; i < 32; i++) {
-	//    local.enemyDistanceToPlayers[i] = local.get_distance_from_enemy(i, local.enemies, local);
-	//  }
-	//}
-	// Now, go through each player and overwrite local ram for the applicable enemies
+    // Now, go through each player and overwrite local ram for the applicable enemies
     auto len = players.length();
     for (uint i = 0; i < len; i++) {
       auto @remote = players[i];
@@ -3020,6 +2986,7 @@ class LocalGameState : GameState {
       if (remote is local) continue;
       if (remote.ttl <= 0) continue;
       if (remote.team != team) continue;
+      if (!local.can_see_sm(remote)) continue;
 
       if (local.can_see_sm(remote)) {
 	    for(uint i = 0; i < 32; i++){
