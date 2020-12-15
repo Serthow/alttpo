@@ -2922,13 +2922,13 @@ class LocalGameState : GameState {
   
   void update_enemy(uint8 enemyIndex, GameState @player) {
     // Does this enemy even have data?
-    if (enemies[enemyIndex*32] == 0) {
+    if (player.enemies[enemyIndex*32] == 0 || local.enemies[enemyIndex*32] == 0) {
       //Enemy is dead from remote, so delete the enemy here
       //TODO update the count for number of enemies in the room
       for(uint i = 0; i < 32; i++){
-        bus::write_u16(0x7e0f78 + enemyIndex*64 + i*2, 0 );
+        bus::write_u16(0x7e0f78 + enemyIndex*64 + i*2, 0);
       }
-      return;
+     return;
     }
 	
     // Get the distances from the players to the enemy
@@ -2937,12 +2937,16 @@ class LocalGameState : GameState {
     uint32 distLocal1 = get_distance_from_enemy(enemyIndex, local.enemies, local); // local dinstance to local enemy
     uint32 distLocal2 = get_distance_from_enemy(enemyIndex, player.enemies, local); //local distance to remote enemy
     
-    //give the enemy the minimum of remote an local health
-    uint16 localHealth = local.enemies[enemyIndex * 32 + 10];
-    uint16 remoteHealth = player.enemies[enemyIndex * 32 + 10];
-    bus::write_u16(0x7e0f78 + enemyIndex*64 + 20, min(localHealth, remoteHealth));
     
-    if (local.timeInRoom < 5) {
+    //give the enemy the minimum of remote and local health
+    bus::write_u16(0x7e0f78 + enemyIndex*64 + 20, min(local.enemies[enemyIndex*32 + 10], player.enemies[enemyIndex*32 + 10]));
+    
+    // give the enemy the maximum freeze time from both players
+    //bus::write_u16(0x7e0f78 + enemyIndex*64 + 38, max(local.enemies[enemyIndex*32 + 19], player.enemies[enemyIndex*32 + 19]));
+    
+    uint8 boss_number = bus::read_u8(0x73179c);
+    
+    if (local.timeInRoom < 5 || boss_number != 0) {
       distLocal1 = 0xffff;
       distLocal2 = 0xffff;
     }
@@ -2958,7 +2962,7 @@ class LocalGameState : GameState {
       // Or has been in the room longer
       // Overwrite our data for this enemy based on the remote players data
       // And update the local array to make the calculation correct for 3+ players
-      for(uint i = 0; i < 32; i++){
+      for(uint i = 0; i < 24; i++){
         local.enemies[enemyIndex*32 + i] = player.enemies[enemyIndex*32 + i];
         bus::write_u16(0x7e0f78 + enemyIndex*64 + i*2, player.enemies[enemyIndex*32 + i]);
       }
