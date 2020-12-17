@@ -2944,7 +2944,7 @@ class LocalGameState : GameState {
     // give the enemy the maximum freeze time from both players
     //bus::write_u16(0x7e0f78 + enemyIndex*64 + 38, max(local.enemies[enemyIndex*32 + 19], player.enemies[enemyIndex*32 + 19]));
     
-    uint8 boss_number = bus::read_u8(0x73179c);
+    uint8 boss_number = bus::read_u8(0x7e179c);
     
     if (local.timeInRoom < 5 || boss_number != 0) {
       distLocal1 = 0xffff;
@@ -2990,7 +2990,6 @@ class LocalGameState : GameState {
       if (remote is local) continue;
       if (remote.ttl <= 0) continue;
       if (remote.team != team) continue;
-      if (!local.can_see_sm(remote)) continue;
 
       if (local.can_see_sm(remote)) {
 	    for(uint i = 0; i < 32; i++){
