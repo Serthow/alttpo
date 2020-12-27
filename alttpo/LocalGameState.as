@@ -70,7 +70,7 @@ class SMSRAMArray : SRAMArray {
 
 class LocalGameState : GameState {
   array<SyncableItem@> areas(0x80);
-  array<SyncableItem@> rooms(0x128);
+  array<SyncableUnderworldRoom@> rooms(0x128);
   array<Sprite@> sprs(0x80);
 
   Notify@ notify;
@@ -87,6 +87,8 @@ class LocalGameState : GameState {
   AncillaTables ancillaTables;
   array<Projectile> projectiles;
 
+  uint16 animation_timer;
+
   LocalGameState() {
     @this.notify = Notify(@notificationSystem.notify);
     @this.itemReceivedDelegate = NotifyItemReceived(@this.collectNotifications);
@@ -96,13 +98,11 @@ class LocalGameState : GameState {
     // create syncable item for each underworld room (word; size=2) using bitwise OR operations (type=2) to accumulate latest state:
     rooms.resize(0x128);
     for (uint a = 0; a < 0x128; a++) {
-      @rooms[a] = @SyncableItem(a << 1, 2, 2);
+      @rooms[a] = @SyncableUnderworldRoom(a, 0xFFFF);
     }
 
     // desync swamp inner watergate at $7EF06A (supertile $35)
-    @rooms[0x035] = @SyncableItem(0x10B << 1, 2, function(SRAM@ sram, uint16 oldValue, uint16 newValue) {
-      return oldValue | (newValue & 0xFF7F);
-    });
+    rooms[0x035].mask = 0xFF7F;
 
     // SRAM [$250..$27f] unused
 
@@ -120,12 +120,8 @@ class LocalGameState : GameState {
       // desync the indoor flags for the swamp palace and the watergate:
       // LDA $7EF216 : AND.b #$7F : STA $7EF216
       // LDA $7EF051 : AND.b #$FE : STA $7EF051
-      @rooms[0x10B] = @SyncableItem(0x10B << 1, 2, function(SRAM@ sram, uint16 oldValue, uint16 newValue) {
-        return oldValue | (newValue & 0xFF7F);
-      });
-      @rooms[0x028] = @SyncableItem(0x028 << 1, 2, function(SRAM@ sram, uint16 oldValue, uint16 newValue) {
-        return oldValue | (newValue & 0xFEFF);
-      });
+      rooms[0x10B].mask = 0xFF7F;
+      rooms[0x028].mask = 0xFEFF;
 
       // desync the overlay flags for the swamp palace and its light world counterpart:
       // LDA $7EF2BB : AND.b #$DF : STA $7EF2BB
@@ -137,6 +133,21 @@ class LocalGameState : GameState {
         return oldValue | (newValue & 0xDF);
       });
     }
+
+    // Pyramid bat crash: ([$7EF2DB] | 0x20)
+    @areas[0x5B] = @SyncableItem(0x280 + 0x5B, 1, function(SRAM@ sram, uint16 oldValue, uint16 newValue) {
+      // pyramid hole has just opened:
+      if ( ((oldValue & 0x20) == 0) && ((newValue & 0x20) == 0x20) ) {
+        // local player is on pyramid:
+        if (local.overworld_room == 0x5B) {
+          // JSL to Overworld_CreatePyramidHole to draw the pyramid hole on screen:
+          pb.jsl(rom.fn_overworld_createpyramidhole);
+          local.notify("Pyramid opened");
+        }
+      }
+
+      return oldValue | newValue;
+    });
 
     for (uint i = 0; i < 0x80; i++) {
       @sprs[i] = Sprite();
@@ -154,8 +165,10 @@ class LocalGameState : GameState {
 
     small_keys_current.reset();
     last_sent = 0;
-    
+
     gotShield = 0;
+
+    animation_timer = 0;
   }
 
   bool registered = false;
@@ -451,6 +464,8 @@ class LocalGameState : GameState {
     dungeon = bus::read_u16(0x7E040C);
     dungeon_entrance = bus::read_u16(0x7E010E);
 
+    animation_timer = bus::read_u16(0x7E0112);
+
     fetch_pvp();
 
     // compute aggregated location for Link into a single 24-bit number:
@@ -598,7 +613,8 @@ class LocalGameState : GameState {
 
   void fetch_sram() {
     // don't fetch latest SRAM when Link is frozen e.g. opening item chest for heart piece -> heart container:
-    if (is_frozen()) return;
+    // NOTE: disabled this check so that items sync instantly when you get them during dialogs.
+    //if (is_frozen()) return;
     local.in_sm_for_items = false;
     bus::read_block_u8(0x7EF000, 0, 0x500, sram);
     bus::read_block_u8(0xA17900, 0, 0x40, sram_buffer);
@@ -860,6 +876,11 @@ class LocalGameState : GameState {
   }
 
   void fetch_tilemap_changes() {
+    // disable tilemap sync based on settings:
+    if (settings.DisableTilemap) {
+      return;
+    }
+
     if (is_dead()) {
       return;
     }
@@ -1565,7 +1586,12 @@ class LocalGameState : GameState {
 
       if (kind == 0x02) {
         // broadcast to sector:
-        envelope.write_u32(actual_location);
+        uint16 sector = actual_location;
+        if ((sector & 0x010000) != 0) {
+          // turn off light/dark world bit so that all underworld locations are equal:
+          sector &= 0x01FFFF;
+        }
+        envelope.write_u32(sector);
       }
     }
 
@@ -1582,7 +1608,7 @@ class LocalGameState : GameState {
 
   array<uint16> maxSize(5);
 
-  uint send_packet(array<uint8> &in envelope, uint p) {
+  uint send_packet(array<uint8> @envelope, uint p) {
     uint len = envelope.length();
     if (len > MaxPacketSize) {
       message("packet[" + fmtInt(p) + "] too big to send! " + fmtInt(len) + " > " + fmtInt(MaxPacketSize));
@@ -1614,7 +1640,7 @@ class LocalGameState : GameState {
     // check if we need to detect our local index:
     if (index == -1) {
       // request our index; receive() will take care of the response:
-      array<uint8> request = create_envelope(0x00);
+      auto @request = create_envelope(0x00);
       p = send_packet(request, p);
     }
 
@@ -1626,7 +1652,7 @@ class LocalGameState : GameState {
 
     // send main packet:
     {
-      array<uint8> envelope = create_envelope();
+      auto @envelope = create_envelope();
 
       serialize_location(envelope);
       serialize_name(envelope);
@@ -1650,59 +1676,61 @@ class LocalGameState : GameState {
 
     if (!settings.RaceMode) {
       // send posisbly multiple packets for tilemaps:
-      p = send_tilemaps(p);
+      if (!settings.DisableTilemap) {
+        p = send_tilemaps(p);
+      }
 
       // send packet every other frame:
       if ((frame & 1) == 0) {
-        array<uint8> envelope = create_envelope(0x02);
+        auto @envelope = create_envelope(0x02);
         serialize_torches(envelope);
         p = send_packet(envelope, p);
       }
 
       // send SRAM updates once every 16 frames:
       if ((frame & 15) == 0) {
-        array<uint8> envelope = create_envelope();
+        auto @envelope = create_envelope();
         rom.serialize_sram_ranges(envelope, serializeSramDelegate);
         p = send_packet(envelope, p);
       }
 
       // send dungeon and overworld SRAM alternating every 16 frames:
       if ((frame & 31) == 0) {
-        array<uint8> envelope = create_envelope();
+        auto @envelope = create_envelope();
         serialize_sram(envelope,   0x0, 0x250); // dungeon rooms
         p = send_packet(envelope, p);
       }
       if ((frame & 31) == 16) {
-        array<uint8> envelope = create_envelope();
+        auto @envelope = create_envelope();
         serialize_sram(envelope, 0x280, 0x340); // overworld events; heart containers, overlays
         p = send_packet(envelope, p);
       }
 
       if (rom.is_smz3()) {
         if ((frame & 31) == 0) {
-          array<uint8> envelope = create_envelope();
+          auto @envelope = create_envelope();
           serialize_sm_events(envelope); // item checks, bosses killed, and doors opened
           p = send_packet(envelope, p);
         }
 
         if ((frame & 31) == 0) {
-          array<uint8> envelope = create_envelope();
+          auto @envelope = create_envelope();
           serialize_sram_buffer(envelope, 0x0, 0x40); // sram buffer, only sent if the rom is an smz3
           p = send_packet(envelope, p);
         }
 
         if ((frame & 31) == 16) {
-          array<uint8> envelope = create_envelope();
+          auto @envelope = create_envelope();
           serialize_sram_buffer(envelope, 0x300, 0x400); // sram buffer, only sent if the rom is an smz3
           p = send_packet(envelope, p);
         }
 
         if (!rom.is_alttp()) {
-          array<uint8> envelope = create_envelope();
+          auto @envelope = create_envelope();
           serialize_sm_location(envelope);
           p = send_packet(envelope, p);
         
-          array<uint8> envelope1 = create_envelope();
+          auto @envelope1 = create_envelope();
           serialize_sm_sprite(envelope1);
           p = send_packet(envelope1, p);
 		  
@@ -1735,7 +1763,8 @@ class LocalGameState : GameState {
       if (remote.in_sm == 1) continue;
 
       // update crystal switches to latest state among all players in same dungeon:
-      if ((module == 0x07 && sub_module == 0x00) && (remote.module == module) && (remote.dungeon == dungeon)) {
+      // animation_timer check is to prevent soft lock if another animation is occurring.
+      if ((module == 0x07 && sub_module == 0x00 && animation_timer == 0) && (remote.module == module) && (remote.dungeon == dungeon)) {
         crystal.compareTo(remote.crystal);
       }
 
@@ -1808,7 +1837,13 @@ class LocalGameState : GameState {
   void update_items(SRAM@ d, bool is_sram_buffer = false) {
     if (rom.is_alttp()) {
       if (is_it_a_bad_time()) return;
-      // don't fetch latest SRAM when Link is frozen e.g. opening item chest for heart piece -> heart container:
+
+      // don't update latest SRAM when Link is frozen e.g. opening item chest for heart piece -> heart container:
+      // when opening a chest with a heart piece inside and if you have 3 pieces, the piece counter goes from 3 to 0
+      // and then the chest is opened, the animation completes, the dialog opens, and you close it, and THEN the heart
+      // container counter is increased by 8 (one full heart).
+      // we need to not sync in new values while this process is happening (link is frozen in place) otherwise it will
+      // break the final calculation and will not increment heart container count.
       if (is_frozen()) return;
     }
 
@@ -2110,6 +2145,11 @@ class LocalGameState : GameState {
   }
 
   void update_tilemap() {
+    // disable tilemap sync based on settings:
+    if (settings.DisableTilemap) {
+      return;
+    }
+
     bool write_to_vram = false;
     bool team_check = true;
 
