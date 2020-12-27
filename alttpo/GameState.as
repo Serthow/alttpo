@@ -587,13 +587,18 @@ class GameState {
   int deserialize_sm_enemies(array<uint8> r, int c){
     //message("deserialize_sm_enemies");
 	
-    uint16 start = (r[c++] - 1) * 0x100;
-	
-    for (uint i = 0; i < 0x100; i++) {
-      auto offs = start + i;
-      auto b = uint16(r[c++]) | (uint16(r[c++]) << 8);
-
-      enemies[offs] = b;
+    uint8 enemyIndex = r[c++];
+    
+    if(r[c++] == 0){
+      for (uint i = 0; i < 32; i++) {
+        enemies[enemyIndex * 32 + i] = 0;
+      }
+      
+      return c;
+    }
+    
+    for (uint i = 0; i < 32; i++) {
+      enemies[enemyIndex * 32 + i] = uint16(r[c++]) | (uint16(r[c++]) << 8);
     }
 	
 	return c;

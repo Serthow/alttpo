@@ -1170,33 +1170,26 @@ class LocalGameState : GameState {
   uint send_sm_enemies(uint p){
     //message("send_sm_enemies");
 	
-    array<uint8> env1 = create_envelope();
-    array<uint8> env2 = create_envelope();
-    array<uint8> env3 = create_envelope();
-    array<uint8> env4 = create_envelope();
+    for (uint i = 0; i < 32; i++){
+      p = send_one_sm_enemy(i, p);
+    }
+    return p;
+  }
   
-    env1.write_u8(uint8(0x11));
-    env2.write_u8(uint8(0x11));
-    env3.write_u8(uint8(0x11));
-    env4.write_u8(uint8(0x11));
-    
-    env1.write_u8(uint8(0x01));
-    env2.write_u8(uint8(0x02));
-    env3.write_u8(uint8(0x03));
-    env4.write_u8(uint8(0x04));
-    
-    
-    for (uint i = 0; i < 0x100; i++) {
-      env1.write_u16(enemies[i]);
-      env2.write_u16(enemies[0x100 + i]);
-      env3.write_u16(enemies[0x200 + i]);
-      env4.write_u16(enemies[0x300 + i]);
+  uint send_one_sm_enemy(uint8 enemyIndex, uint p){
+    array<uint8> env = create_envelope();
+    env.write_u8(uint8(0x11));
+    env.write_u8(enemyIndex);
+    if (enemies[32*enemyIndex] == 0){
+      env.write_u8(0);
+    } else {
+      env.write_u8(1);
+      for (uint i = 0; i < 32; i++){
+        env.write_u16(enemies[enemyIndex*32 + i]);
+      }
     }
     
-    p = send_packet(env1, p);
-    p = send_packet(env2, p);
-    p = send_packet(env3, p);
-    p = send_packet(env4, p);
+    p = send_packet(env, p);
     return p;
   }
 
@@ -2922,12 +2915,15 @@ class LocalGameState : GameState {
   
   void update_enemy(uint8 enemyIndex, GameState @player) {
     // Does this enemy even have data?
-    if (player.enemies[enemyIndex*32] == 0 || local.enemies[enemyIndex*32] == 0) {
+    if (player.enemies[enemyIndex*32] == 0) {
       //Enemy is dead from remote, so delete the enemy here
       //TODO update the count for number of enemies in the room
       for(uint i = 0; i < 32; i++){
         bus::write_u16(0x7e0f78 + enemyIndex*64 + i*2, 0);
       }
+      
+      bus::write_u16(0x7E0E4E, bus::read_u16(0x7E0E4E) - 1);
+      bus::write_u16(0x7E0E50, bus::read_u16(0x7E0E50) + 1);
      return;
     }
     
@@ -2994,9 +2990,9 @@ class LocalGameState : GameState {
       if (remote.ttl <= 0) continue;
       if (remote.team != team) continue;
 
-      if (local.can_see_sm(remote)) {
-	    for(uint i = 0; i < 32; i++){
-          local.update_enemy(i, remote);
+      if (local.can_see_sm(remote) && local.enemies[i*32] != 0) {
+	    for(uint j = 0; j < 32; j++){
+          local.update_enemy(j, remote);
         }
       }
     }
