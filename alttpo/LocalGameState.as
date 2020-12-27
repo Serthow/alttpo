@@ -2930,6 +2930,8 @@ class LocalGameState : GameState {
       }
      return;
     }
+    
+    uint bound = (local.enemies[7] & 0x4000) == 0x4000 ? 24 : 32; //determines how much memory to copy into enemy slot
 	
     // Get the distances from the players to the enemy
     uint32 distRemote1 = get_distance_from_enemy(enemyIndex, local.enemies, player); //remote distance to local enemy
@@ -2946,9 +2948,13 @@ class LocalGameState : GameState {
     
     uint8 boss_number = bus::read_u8(0x7e179c);
     
-    if (local.timeInRoom < 5 || boss_number != 0) {
+    if (local.timeInRoom < 5) {
       distLocal1 = 0xffff;
       distLocal2 = 0xffff;
+    } else if (boss_number != 0){
+      distLocal1 = distRemote1;
+      distLocal2 = distLocal2;
+      //bound = 32;
     }
 	
     if (distLocal1 < distRemote1 && distLocal2 < distRemote2) {
@@ -2962,13 +2968,10 @@ class LocalGameState : GameState {
       // Or has been in the room longer
       // Overwrite our data for this enemy based on the remote players data
       // And update the local array to make the calculation correct for 3+ players
-      for(uint i = 0; i < 24; i++){
+      for(uint i = 0; i < bound; i++){
         local.enemies[enemyIndex*32 + i] = player.enemies[enemyIndex*32 + i];
         bus::write_u16(0x7e0f78 + enemyIndex*64 + i*2, player.enemies[enemyIndex*32 + i]);
       }
-    }
-    else {
-	    //local.name += fmtInt(enemyIndex) + "!";
     }
   }
 
