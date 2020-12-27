@@ -3030,9 +3030,9 @@ class LocalGameState : GameState {
       if (remote.ttl <= 0) continue;
       if (remote.team != team) continue;
 
-      if (local.can_see_sm(remote) && local.enemies[i*32] != 0) {
+      if (local.can_see_sm(remote)) {
 	    for(uint j = 0; j < 32; j++){
-          local.update_enemy(j, remote);
+          if (local.enemies[j*32] != 0) local.update_enemy(j, remote);
         }
       }
     }
