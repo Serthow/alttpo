@@ -100,7 +100,7 @@ class LocalGameState : GameState {
     for (uint a = 0; a < 0x128; a++) {
       @rooms[a] = @SyncableUnderworldRoom(a, 0xFFFF);
     }
-
+    set_room_masks(settings.SyncChests);
     // desync swamp inner watergate at $7EF06A (supertile $35)
     rooms[0x035].mask = 0xFF7F;
 
@@ -157,6 +157,21 @@ class LocalGameState : GameState {
     @small_keys_current = @SyncableByte(0xF36F);
     for (uint i = 0; i < 0x10; i++) {
       @small_keys[i] = @SyncableByte(small_keys_min_offs + i);
+    }
+  }
+
+  void set_room_masks(bool syncChests) {
+    uint16 mask = 0xFFFF;
+    if (!syncChests) {
+      // chops off the 6 bits that sync chests/keys
+      mask = ~uint16(0x03F0);
+    }
+    for (uint a = 0; a < 0x128; a++) {
+      if (a == 0x035) {
+        // keep the inner watergate as is
+        continue;
+      }
+      rooms[a].mask = mask;
     }
   }
 
@@ -1724,8 +1739,9 @@ class LocalGameState : GameState {
           serialize_sram_buffer(envelope, 0x300, 0x400); // sram buffer, only sent if the rom is an smz3
           p = send_packet(envelope, p);
         }
-
-        if (!rom.is_alttp()) {
+      }
+    }
+    if (!rom.is_alttp()) {
           auto @envelope = create_envelope();
           serialize_sm_location(envelope);
           p = send_packet(envelope, p);
@@ -1733,7 +1749,6 @@ class LocalGameState : GameState {
           auto @envelope1 = create_envelope();
           serialize_sm_sprite(envelope1);
           p = send_packet(envelope1, p);
-		  
           p = send_sm_enemies(p);
         }
       }
