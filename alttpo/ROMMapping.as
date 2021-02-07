@@ -17,6 +17,7 @@ abstract class ROMMapping {
   void check_game() {}
   bool is_alttp() { return true; }
   bool is_smz3()  { return false;}
+  bool is_sm()    { return false; }
   void register_pc_intercepts() {
     // intercept at PC=`JSR ClearOamBuffer; JSL MainRouting`:
     cpu::register_pc_interceptor(rom.fn_pre_main_loop, @on_main_alttp);
@@ -692,6 +693,7 @@ class VanillaSMMappping : ROMMapping{
   
   bool is_alttp() override { return false; }
   bool is_smz3() override { return true;}
+  bool is_sm()   override { return true; }
 
   void register_pc_intercepts() override {
     // SM main is at 0x82893D (PHK; PLB)
@@ -783,6 +785,9 @@ ROMMapping@ detect() {
     return SMZ3Mapping(kind, seed);
   } else if(title.slice(0, 13) == "Super Metroid"){
       message("recognized vanilla SM");
+      return VanillaSMMappping();
+  } else if(title.slice(0, 3) == "SM3"){
+      message("recognized SM randomizer");
       return VanillaSMMappping();
   } else {
     switch (region) {
