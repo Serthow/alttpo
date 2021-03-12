@@ -61,7 +61,7 @@ void on_main_alttp(uint32 pc) {
     return;
   }
 
-  if (!settings.RaceMode) {
+  {
     local.update_tilemap();
 
     local.update_wram();
@@ -71,12 +71,14 @@ void on_main_alttp(uint32 pc) {
     ALTTPSRAMArray @sram = @ALTTPSRAMArray(@local.sram);
     ALTTPSRAMArray @sram_buffer = @ALTTPSRAMArray(@local.sram_buffer, true);
 
-    if ((local.frame & 15) == 0) {
-      local.update_items(sram);
-      if (rom.is_smz3()) {
-        local.update_items(sram_buffer, true);
-        local.update_sm_events_buffer();
-        local.update_games_won();
+    if (settings.SyncItems) {
+      if ((local.frame & 15) == 0) {
+        local.update_items(sram);
+        if (rom.is_smz3()) {
+          local.update_items(sram_buffer, true);
+          local.update_sm_events_buffer();
+          local.update_games_won();
+        }
       }
     }
 
@@ -148,7 +150,6 @@ void on_main_sm(uint32 pc) {
       local.update_sm_palette();
     }
   }
-  
 
   local.module = 0x00;
   local.sub_module = 0x00;
@@ -179,7 +180,7 @@ void on_main_sm(uint32 pc) {
     return;
   }
 
-  if (!settings.RaceMode) {
+  if (settings.SyncItems) {
     // all we can do is update items:
     if ((local.frame & 15) == 0) {
       if (sm_is_safe_state()) {
@@ -273,6 +274,10 @@ void pre_frame() {
       continue;
     }
     remote.ttl_count();
+
+    if (!settings.SyncSprites) {
+      continue;
+    }
 
     // exit early if game is not ALTTP (for SMZ3):
     if (!rom.is_alttp()) {

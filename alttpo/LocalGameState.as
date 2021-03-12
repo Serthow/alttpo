@@ -892,7 +892,7 @@ class LocalGameState : GameState {
 
   void fetch_tilemap_changes() {
     // disable tilemap sync based on settings:
-    if (settings.DisableTilemap) {
+    if (!settings.SyncTilemap) {
       return;
     }
 
@@ -1265,22 +1265,22 @@ class LocalGameState : GameState {
     }
   }
 
-  void serialize_wram(array<uint8> &r) {
+  void serialize_crystals(array<uint8> &r) {
     // write a table of 1 sync-byte for dungeon crystal switch state:
     r.write_u8(uint8(0x05));
     r.write_u8(uint8(0x01));
     r.write_u16(crystal.offs);
     crystal.serialize(r);
+  }
 
-    if (enableSmallKeySync) {
-      // write a table of 16 sync-bytes for dungeon small keys:
-      r.write_u8(uint8(0x05));
-      r.write_u8(uint8(0x10));
-      r.write_u16(small_keys_min_offs);
-      for (uint8 i = 0; i < 0x10; i++) {
-        auto @k = @small_keys[i];
-        k.serialize(r);
-      }
+  void serialize_smallKeys(array<uint8> &r) {
+    // write a table of 16 sync-bytes for dungeon small keys:
+    r.write_u8(uint8(0x05));
+    r.write_u8(uint8(0x10));
+    r.write_u16(small_keys_min_offs);
+    for (uint8 i = 0; i < 0x10; i++) {
+      auto @k = @small_keys[i];
+      k.serialize(r);
     }
   }
 
@@ -1677,21 +1677,26 @@ class LocalGameState : GameState {
         serialize_pvp(envelope);
       }
 
-      if (!settings.RaceMode) {
+      if (settings.SyncTilemap) {
         serialize_ancillae(envelope);
         serialize_objects(envelope);
-        serialize_wram(envelope);
+        serialize_crystals(envelope);
+      }
+      if (settings.SyncSmallKeys) {
+        serialize_smallKeys(envelope);
       }
 
       p = send_packet(envelope, p);
     }
 
     // send possibly multiple packets for sprites:
-    p = send_sprites(p);
+    if (settings.SyncSprites) {
+      p = send_sprites(p);
+    }
 
-    if (!settings.RaceMode) {
+    {
       // send posisbly multiple packets for tilemaps:
-      if (!settings.DisableTilemap) {
+      if (settings.SyncTilemap) {
         p = send_tilemaps(p);
       }
 
@@ -1710,15 +1715,19 @@ class LocalGameState : GameState {
       }
 
       // send dungeon and overworld SRAM alternating every 16 frames:
-      if ((frame & 31) == 0) {
-        auto @envelope = create_envelope();
-        serialize_sram(envelope,   0x0, 0x250); // dungeon rooms
-        p = send_packet(envelope, p);
+      if (settings.SyncUnderworld) {
+        if ((frame & 31) == 0) {
+          auto @envelope = create_envelope();
+          serialize_sram(envelope,   0x0, 0x250); // dungeon rooms
+          p = send_packet(envelope, p);
+        }
       }
-      if ((frame & 31) == 16) {
-        auto @envelope = create_envelope();
-        serialize_sram(envelope, 0x280, 0x340); // overworld events; heart containers, overlays
-        p = send_packet(envelope, p);
+      if (settings.SyncOverworld) {
+        if ((frame & 31) == 16) {
+          auto @envelope = create_envelope();
+          serialize_sram(envelope, 0x280, 0x340); // overworld events; heart containers, overlays
+          p = send_packet(envelope, p);
+        }
       }
 
       if (rom.is_smz3()) {
@@ -1759,8 +1768,10 @@ class LocalGameState : GameState {
     if (module < 0x06) return;
 
     // reset comparison state:
-    crystal.compareStart();
-    if (enableSmallKeySync) {
+    if (settings.SyncTilemap) {
+      crystal.compareStart();
+    }
+    if (settings.SyncSmallKeys) {
       for (uint j = 0; j < 0x10; j++) {
         small_keys[j].compareStart();
       }
@@ -1777,13 +1788,15 @@ class LocalGameState : GameState {
       if (remote.is_it_a_bad_time()) continue;
       if (remote.in_sm == 1) continue;
 
-      // update crystal switches to latest state among all players in same dungeon:
-      // animation_timer check is to prevent soft lock if another animation is occurring.
-      if ((module == 0x07 && sub_module == 0x00 && animation_timer == 0) && (remote.module == module) && (remote.dungeon == dungeon)) {
-        crystal.compareTo(remote.crystal);
+      if (settings.SyncTilemap) {
+        // update crystal switches to latest state among all players in same dungeon:
+        // animation_timer check is to prevent soft lock if another animation is occurring.
+        if ((module == 0x07 && sub_module == 0x00 && animation_timer == 0) && (remote.module == module) && (remote.dungeon == dungeon)) {
+          crystal.compareTo(remote.crystal);
+        }
       }
 
-      if (enableSmallKeySync) {
+      if (settings.SyncSmallKeys) {
         // update small keys:
         if (remote.small_keys !is null && remote.small_keys.length() >= 0x10) {
           for (uint j = 0; j < 0x10; j++) {
@@ -1797,23 +1810,25 @@ class LocalGameState : GameState {
       }
     }
 
-    if (crystal.winner !is null) {
-      // record timestamp so if we just joined we should keep that:
-      if (crystal.updateTo(crystal.winner)) {
-        //if (debugData) {
-        //  message("crystal update " + fmtHex(crystal.oldValue,2) + " -> " + fmtHex(crystal.value,2));
-        //}
+    if (settings.SyncTilemap) {
+      if (crystal.winner !is null) {
+        // record timestamp so if we just joined we should keep that:
+        if (crystal.updateTo(crystal.winner)) {
+          //if (debugData) {
+          //  message("crystal update " + fmtHex(crystal.oldValue,2) + " -> " + fmtHex(crystal.value,2));
+          //}
 
-        // go to switch transition module:
-        //LDA.b #$16 : STA $11
-        bus::write_u8(0x7E0011, 0x16);
+          // go to switch transition module:
+          //LDA.b #$16 : STA $11
+          bus::write_u8(0x7E0011, 0x16);
 
-        // trigger sound effect:
-        //LDA.b #$25 : JSL Sound_SetSfx3PanLong
+          // trigger sound effect:
+          //LDA.b #$25 : JSL Sound_SetSfx3PanLong
+        }
       }
     }
 
-    if (enableSmallKeySync) {
+    if (settings.SyncSmallKeys) {
       auto this_dungeon = dungeon >> 1;
       for (uint j = 0; j < 0x10; j++) {
         auto @key = small_keys[j];
@@ -1917,6 +1932,9 @@ class LocalGameState : GameState {
 
   void update_overworld(SRAM@ d) {
     if (is_it_a_bad_time()) return;
+    if (!settings.SyncOverworld) {
+      return;
+    }
 
     uint len = players.length();
 
@@ -1963,6 +1981,10 @@ class LocalGameState : GameState {
   }
 
   void update_rooms(SRAM@ d) {
+    if (!settings.SyncUnderworld) {
+      return;
+    }
+
     uint len = players.length();
 
     // $000 - $24F : Data for Rooms (two bytes per room)
@@ -2161,7 +2183,7 @@ class LocalGameState : GameState {
 
   void update_tilemap() {
     // disable tilemap sync based on settings:
-    if (settings.DisableTilemap) {
+    if (!settings.SyncTilemap) {
       return;
     }
 
@@ -2286,6 +2308,7 @@ class LocalGameState : GameState {
 
   void update_ancillae() {
     if (is_dead()) return;
+    if (!settings.SyncTilemap) return;
 
     uint len = players.length();
 
@@ -2539,12 +2562,12 @@ class LocalGameState : GameState {
     }
   }
   
-  void update_games_won(){
+  void update_games_won() {
     uint len = players.length();
-      
+
     uint8 temp_sm_clear = sm_clear;
     uint8 temp_z3_clear = z3_clear;
-      
+
     for (uint i = 0; i < len; i++) {
       auto @remote = players[i];
       if (remote is null) continue;
@@ -2556,12 +2579,12 @@ class LocalGameState : GameState {
       sm_clear = sm_clear | remote.sm_clear;
       z3_clear = z3_clear | remote.z3_clear;
     }
-    
+
     if (temp_sm_clear != sm_clear){
       notify("Quest Kill Mother Brain Completed");
       bus::write_u8(0xa17402, sm_clear);
     }
-    
+
     if (temp_z3_clear !=z3_clear){
       notify("Quest Kill Gannon Completed");
       bus::write_u8(0xa17506, z3_clear);
@@ -2571,7 +2594,7 @@ class LocalGameState : GameState {
   void set_in_sm(bool b) {
     in_sm = b ? 1 : 0;
   }
-  
+
   void get_sm_coords() {
     if (sm_loading_room()) return;
     uint8 tempArea = bus::read_u8(0x7E079f);
@@ -2591,13 +2614,13 @@ class LocalGameState : GameState {
       timeInRoom = 0;
     }
   }
-  
+
   void get_sm_sprite_data(){
     offsm1 = bus::read_u16(0x7e071f);
     offsm2 = bus::read_u16(0x7e0721);
     bus::read_block_u16(0x7eC180, 0, sm_palette.length(), sm_palette);
   }
-  
+
   bool deselect_tunic_sync_sm;
   void update_sm_palette(){
     sm_palette[1] = player_color_dark_33;
@@ -2605,20 +2628,20 @@ class LocalGameState : GameState {
     sm_palette[11] = player_color_dark_33;
     sm_palette[10] = player_color_dark_50;
   }
-  
+
   void update_local_suit(){
     if(!rom.is_alttp()){
-    if(settings.SyncTunic){
-      bus::write_u16(0x7ec182, player_color_dark_33);
-      bus::write_u16(0x7ec184, player_color);
-      bus::write_u16(0x7ec196, player_color_dark_33);
-      bus::write_u16(0x7ec194, player_color_dark_33);
-     } else if(deselect_tunic_sync_sm){
-      bus::write_u16(0x7e0a48, 0x06);
-     }
-  }
-  
-  deselect_tunic_sync_sm = settings.SyncTunic;
+      if(settings.SyncTunic){
+        bus::write_u16(0x7ec182, player_color_dark_33);
+        bus::write_u16(0x7ec184, player_color);
+        bus::write_u16(0x7ec196, player_color_dark_33);
+        bus::write_u16(0x7ec194, player_color_dark_33);
+      } else if(deselect_tunic_sync_sm){
+        bus::write_u16(0x7e0a48, 0x06);
+      }
+    }
+
+    deselect_tunic_sync_sm = settings.SyncTunic;
   }
 
   // detect attacks from us against all nearby players:
