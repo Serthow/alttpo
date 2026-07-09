@@ -24,12 +24,17 @@ abstract class ROMMapping {
     return _title;
   }
 
-  void check_game() {}
   bool is_alttp() { return true; }
-  bool is_smz3()  { return false;}
+  bool is_sm()  { return false;}
   void register_pc_intercepts() {
     // intercept at PC=`JSR ClearOamBuffer; JSL MainRouting`:
     cpu::register_pc_interceptor(rom.fn_pre_main_loop, @on_main_alttp);
+
+    // JP 1.0 and US confirmed addresses:
+    // Sprite_Main#_068328
+    // Sprite_Main_RTL#_0683C1
+    cpu::register_pc_interceptor(fastrom + 0x068328, @on_sprite_main_alttp);
+    cpu::register_pc_interceptor(fastrom + 0x0683C1, @on_sprite_main_end_alttp);
   }
   void update_extras() {}
 
@@ -693,7 +698,7 @@ class DoorRandomizerMapping : RandomizerMapping {
       if (remote is local) continue;
       if (remote.ttl <= 0) continue;
       if (remote.team != local.team) continue;
-      if (remote.in_sm_for_items) continue;
+      if (remote.get_in_sm()) continue;
 
       // mix all the pot-picked-up bits across players into ours:
       for (uint32 j = 0; j < 0x250; j++) {
@@ -731,16 +736,12 @@ class SMZ3Mapping : RandomizerMapping {
     RandomizerMapping::syncAll();
   }
 
-  uint8 game = 0;
-  void check_game() override {
-    game = bus::read_u8(0xA173FE);
-  }
-
-  bool is_alttp() override { return game == 0; }
-  bool is_smz3() override { return true;}
+  bool is_alttp() override { return true; }
+  bool is_sm() override { return true;}
 
   void register_pc_intercepts() override {
-    cpu::register_pc_interceptor(rom.fn_pre_main_loop, @on_main_alttp);
+    // call base class method for LTTP interceptors (enables enemy sync):
+    ROMMapping::register_pc_intercepts();
 
     // SM main is at 0x82893D (PHK; PLB)
     // SM main @loop (PHP; REP #$30) https://github.com/strager/supermetroid/blob/master/src/bank82.asm#L1066
@@ -754,7 +755,7 @@ class VanillaSMMappping : ROMMapping{
     super();
     update_syncables();
   }
-  
+
   void update_syncables() {
     //metroid items
     syncables = {whenSyncItems(@SyncableItem(0x02, 1, 2, @nameForMetroidSuits, true)),
@@ -768,14 +769,46 @@ class VanillaSMMappping : ROMMapping{
                  whenSyncItems(@SyncableItem(0x22, 2, 1, null, true)), // energy tanks
                 };
   }
-  
+
   bool is_alttp() override { return false; }
-  bool is_smz3() override { return true;}
+  bool is_sm() override { return true; }
 
   void register_pc_intercepts() override {
     // SM main is at 0x82893D (PHK; PLB)
     // SM main @loop (PHP; REP #$30) https://github.com/strager/supermetroid/blob/master/src/bank82.asm#L1066
     cpu::register_pc_interceptor(0x828948, @on_main_sm);
+  }
+
+}
+
+class MetroidXFusionMappping : ROMMapping{
+
+  MetroidXFusionMappping() {
+    super();
+    update_syncables();
+  }
+
+  void update_syncables() {
+    //metroid items
+    syncables = {whenSyncItems(@SyncableItem(0x02, 1, 2, @nameForXFusionSuits, true)),
+                 whenSyncItems(@SyncableItem(0x03, 1, 2, @nameForXFusionBoots, true)),
+                 whenSyncItems(@SyncableItem(0x06, 1, 2, @nameForXFusionBeams, true)),
+                 whenSyncItems(@SyncableItem(0x07, 1, 1, null, true)), // charge beam
+                 whenSyncItems(@SyncableItem(0x26, 1, 1, null, true)), // missile capacity
+                 whenSyncItems(@SyncableItem(0x2a, 1, 1, null, true)), // super missile capacity
+                 whenSyncItems(@SyncableItem(0x2e, 1, 1, null, true)), // power bomb capacity
+                 whenSyncItems(@SyncableItem(0x32, 2, 1, null, true)), // reserve tanks
+                 whenSyncItems(@SyncableItem(0x22, 2, 1, null, true)), // energy tanks
+                };
+  }
+
+  bool is_alttp() override { return false; }
+  bool is_sm() override { return true; }
+
+  void register_pc_intercepts() override {
+    // SM main is at 0x82893D (PHK; PLB)
+    // SM main @loop (PHP; REP #$30) https://github.com/strager/supermetroid/blob/master/src/bank82.asm#L1066
+    cpu::register_pc_interceptor(0x8A8023, @on_main_sm);
   }
 
 }
@@ -843,7 +876,7 @@ ROMMapping@ detect() {
     auto kind = title.slice(0, 2) + " v" + title.slice(2, 3);
     message("Recognized Berserker MultiWorld Door Randomizer " + kind + " randomized JP ROM version. Seed: " + seed);
     return DoorRandomizerMapping(kind, seed);
-  } else if ( (title.slice(0, 2) == "ER") && (title[5] == '_') ) {
+  } else if ( ((title.slice(0, 2) == "ER") || (title.slice(0,2) == "DR")) && (title[5] == '_') ) {
     // ALTTPR Entrance or Door Randomizer.
     //  0123456789
     // "ER002_1_1_164246190  "
@@ -884,12 +917,23 @@ ROMMapping@ detect() {
   } else if(title.slice(0, 13) == "Super Metroid") {
     message("recognized vanilla SM");
     return VanillaSMMappping();
+  } else if(title.slice(0, 4) == "SMMR") {
+    // AP-branded map randomizer for Super Metroid:
+    message("recognized Super Metroid Map Randomizer");
+    return VanillaSMMappping();
+  } else if(title.slice(0, 21) == "SUPERMETROID MAPRANDO") {
+    // map randomizer for Super Metroid:
+    message("recognized Super Metroid Map Randomizer");
+    return VanillaSMMappping();
   } else if(title == "      SM RANDOMIZER  ") {
      message("recognized SM randomizer");
      return VanillaSMMappping();
   } else if(title.slice(0,3) == "SM3") {
      message("recognized SM randomizer");
      return VanillaSMMappping();
+  } else if (title == "M3 X-Fusion Hack     "){
+    message("recognized X-Fusion");
+    return MetroidXFusionMappping();
   } else {
     switch (region) {
       case 0x00:

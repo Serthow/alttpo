@@ -6,10 +6,9 @@ bool debug = false;
 bool debugReadout = false;
 bool debugData = false;
 bool debugSRAM = false;
-bool debugNet = false;
 bool debugOAM = false;
 bool debugSprites = false;
-bool debugGameObjects = false;
+bool debugEnemyWindow = false;
 bool debugMemory = false;
 
 bool debugRTDScapture = false;
@@ -20,10 +19,10 @@ bool enableMap = true;
 bool enablePlayerList = false;
 bool enableBgMusic = true;
 
-bool enableRenderToExtra = true;
+bool enableNetRateLimiting = false;
+bool enableNetReporting = false;
 
-// sync control:
-bool enableObjectSync = false;
+bool enableRenderToExtra = true;
 
 void init() {
   //message("init()");
@@ -66,12 +65,8 @@ void init() {
     @oamWindow = OAMWindow();
   }
 
-  if (debugGameObjects) {
-    @gameSpriteWindow = GameSpriteWindow();
-  }
-
-  if (debugMemory) {
-    @memoryWindow = MemoryWindow();
+  if (debugEnemyWindow) {
+    @enemyWindow = EnemyWindow();
   }
 
   if (enablePlayerList) {
@@ -99,6 +94,10 @@ void cartridge_loaded() {
     }
   }
 
+  if (debugMemory) {
+    @memoryWindow = MemoryWindow();
+  }
+
   // read the JSL target address from the RESET vector code:
   rom.read_main_routing();
 
@@ -123,7 +122,7 @@ void cartridge_loaded() {
   if (worldMapWindow !is null) {
     worldMapWindow.loadMap(true);
     worldMapWindow.drawMap();
-    if (rom.is_smz3()) {
+    if (rom.is_sm()) {
       worldMapWindow.add_sm_button();
     }
   }
@@ -188,4 +187,15 @@ void dbgData(const string &in msg) {
 uint16 min(uint16 a, uint16 b) {
   if (a < b) return a;
   return b;
+}
+
+uint16 max(uint16 a, uint16 b) {
+  if (a > b) return a;
+  return b;
+}
+
+int absoluteValue(int a){
+  if (a > 0)
+    return a;
+  return -a;
 }

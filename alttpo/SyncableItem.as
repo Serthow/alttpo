@@ -138,7 +138,7 @@ class SyncableItem {
     if (newValue == oldValue) {
       return false;
     }
-
+    
     if ((notifyNewItems !is null) && (notifyItemReceived !is null)) {
       notifyNewItems(oldValue, newValue, notifyItemReceived);
     }
@@ -186,7 +186,7 @@ class SyncableItem {
 
   void update_sm_counts() {
     int base = 0;
-    if (local.in_sm_for_items) {
+    if (local.get_in_sm()) {
       base = 0x7E09A2;
     } else {
       base = 0xA17900;
@@ -475,6 +475,7 @@ uint16 mutateSword(SRAM@ localSRAM, uint16 oldValue, uint16 newValue) {
       // JSL DecompSwordGfx
       pb.jsl(rom.fn_decomp_sword_gfx);
       pb.jsl(rom.fn_sword_palette);
+      local.lttp_uniqtile_clear_sword();
     }
     return newValue;
   }
@@ -492,6 +493,7 @@ uint16 mutateShield(SRAM@ localSRAM, uint16 oldValue, uint16 newValue) {
       // JSL DecompShieldGfx
       pb.jsl(rom.fn_decomp_shield_gfx);
       pb.jsl(rom.fn_shield_palette);
+      local.lttp_uniqtile_clear_shield();
     }
     //local.gotShield = newValue;
     return newValue;
@@ -801,6 +803,32 @@ const array<string> @variable3Names = { "Wave Beam",
                                         "",
                                         "" };
 
+const array<string> @xfusionvariable1Names = {  "Varia Suit",
+                                                "Lv.2 Missile",
+                                                "Morph Ball",
+                                                "Screw Attack",
+                                                "Lv.4 Missile",
+                                                "Gravity Suit",
+                                                "Blank2",
+                                                "Spike Breaker" };
+
+const array<string> @xfusionvariable2Names =  { "Super Jump",
+                                                "Space Jump",
+                                                "Blank4",
+                                                "Lv.2 Speed Booster",
+                                                "Bombs",
+                                                "Lv.1 Speed Booster",
+                                                "Grapple Beam",
+                                                "Lv.3 Missile" };
+
+const array<string> @xfusionvariable3Names =  { "Wave Beam",
+                                                "Ice Beam",
+                                                "Spazer",
+                                                "Plasma",
+                                                "Blank9",
+                                                "Blank10",
+                                                "Blank11",
+                                                "Blank12" };
 
 void nameForCompass1 (uint16 old, uint16 new, NotifyItemReceived @notify) { notifyBitfieldItem(compass1Names, notify, old, new); }
 void nameForCompass2 (uint16 old, uint16 new, NotifyItemReceived @notify) { notifyBitfieldItem(compass2Names, notify, old, new); }
@@ -816,6 +844,10 @@ void nameForProgress2(uint16 old, uint16 new, NotifyItemReceived @notify) { noti
 void nameForMetroidSuits (uint16 old, uint16 new, NotifyItemReceived @notify) { notifyBitfieldItem(variable1Names, notify, old, new); }
 void nameForMetroidBoots (uint16 old, uint16 new, NotifyItemReceived @notify) { notifyBitfieldItem(variable2Names, notify, old, new); }
 void nameForMetroidBeams (uint16 old, uint16 new, NotifyItemReceived @notify) { notifyBitfieldItem(variable3Names, notify, old, new); }
+
+void nameForXFusionSuits (uint16 old, uint16 new, NotifyItemReceived @notify) { notifyBitfieldItem(xfusionvariable1Names, notify, old, new); }
+void nameForXFusionBoots (uint16 old, uint16 new, NotifyItemReceived @notify) { notifyBitfieldItem(xfusionvariable2Names, notify, old, new); }
+void nameForXFusionBeams (uint16 old, uint16 new, NotifyItemReceived @notify) { notifyBitfieldItem(xfusionvariable3Names, notify, old, new); }
 
 const array<string> @randomizerItems1Names = { "Flute (activated)",
                                                "Flute",

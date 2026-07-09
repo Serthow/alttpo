@@ -1,7 +1,7 @@
 
 void post_frame() {
   //message("post_frame");
-
+  
   if (oamWindow !is null) {
     oamWindow.update();
   }
@@ -79,23 +79,27 @@ void post_frame() {
       ppu::frame.text(  0,  0, fmtHex(bus::read_u8(0x7E0998), 2));
     }
   }
-
+  
+  
   if (sprites !is null) {
     for (int i = 0; i < 16; i++) {
-      palette7[i] = ppu::cgram[(15 << 4) + i];
+      // lttp:
+      //palette7[i] = ppu::cgram[(15 << 4) + i];
+      // sm:
+      palette7[i] = ppu::cgram[((8 + 4) << 4) + i];
     }
     sprites.render(palette7);
     sprites.update();
   }
 
-  if (gameSpriteWindow !is null) {
-    gameSpriteWindow.update();
+  if (enemyWindow !is null) {
+    enemyWindow.update();
   }
 
   if (memoryWindow !is null) {
     memoryWindow.update();
   }
-  
+
   local.update_local_suit();
 
   if (settings.EnablePvP && debugData) {

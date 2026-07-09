@@ -88,7 +88,7 @@ class WorldMapWindow {
       metroid.visible = false;
 
       // NOTE(Serthow): takes less than a second on my PC, discrepency between jsd and I is unknown
-      if (!metroid.loadPNG("map-super-metroid-no-key.png")) {
+      if (!metroid.loadPNG("map-super-metroid-no-key_highres.png")) {
         message("failed to load map-super-metroid-no-key.png");
         // fill the canvas with red to denote failure:
         metroid.color = GUI::Color(192, 0, 0);
